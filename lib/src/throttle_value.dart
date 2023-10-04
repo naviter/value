@@ -1,61 +1,71 @@
 import 'dart:async';
 
+import 'list_value.dart';
+import 'map_value.dart';
 import 'value.dart';
 
-extension ThrottleExtension<T> on ReadonlyValue<T> {
-  ReadonlyValue<T> throttle(Duration period, {DateTime Function() currentTimeProvider, T Function(List<T>) averager})
-    => _ThrottleValue(this, period, currentTimeProvider: currentTimeProvider);
-}
-
-extension DoubleAveragedThrottleExtension on ReadonlyValue<double> {
-  ReadonlyValue<double> averagedThrottle(Duration period, {DateTime Function() currentTimeProvider})
-    => _ThrottleValue(this, period, currentTimeProvider: currentTimeProvider, averager: _averager);
-
-  double _averager(List<double> _buffer) {
-    final filtered = _buffer.where((element) => element != null && element.isFinite).toList();
-    return filtered.isNotEmpty
-      ? filtered.reduce((a, b) => a + b) / filtered.length
-      : null;
-  }
-}
-
-class _ThrottleValue<T> extends ReadonlyValue<T> {
-  _ThrottleValue(this.origin, this.period, {this.currentTimeProvider, this.averager});
-
-  final ReadonlyValue<T> origin;
-  final Duration period;
-  final DateTime Function() currentTimeProvider;
-
-  /// If averager is not provided, only the last update in period is propagated further
-  final T Function(List<T>) averager;
-
+mixin _ThrottleValueBase<T> on ReadonlyValue<T> {
+  ReadonlyValue<T> get origin;
+  Duration get period;
   @override T get value => origin.value;
-  DateTime _lastUpdated;
 
-  final _buffer = <T>[];
+  @override ValueSubscription listen(FutureOr<void> Function(T) listener, {bool sendNow = false, void Function()? onCancel}) {
+    Timer? followUpTimer;
+    DateTime? lastListenerCalled;
 
-  @override ValueSubscription listen(FutureOr<void> Function(T) listener, {bool sendNow = false}) {
     return origin.listen((newValue) async {
-      if (averager != null && newValue != null)
-        _buffer.add(newValue);
+      followUpTimer?.cancel();
+      final now = DateTime.now();
 
-      final now = currentTimeProvider?.call() ?? DateTime.now();
-
-      if (_lastUpdated != null) {
-        if (now.isBefore(_lastUpdated)) { // Jump back in time
-          _buffer.clear();
-          _lastUpdated = now;
-          await listener(newValue);
-          return;
-        }
-        else if (now.isBefore(_lastUpdated.add(period)))
-          return; // Throttle the result
+      Future<void> sendUpdate() async {
+        lastListenerCalled = now;
+        await listener(newValue);
       }
 
-      _lastUpdated = now;
-      final valueToSend = averager == null || _buffer.length <= 1 ? newValue : (averager.call(_buffer) ?? newValue);
-      _buffer.clear();
-      await listener(valueToSend);
-    }, sendNow: sendNow);
+      final timestampToCallListener = lastListenerCalled?.add(period);
+
+      if (timestampToCallListener != null && timestampToCallListener.isAfter(now)) {
+        // Skip sending result now, but send it with _followUpTimer
+        followUpTimer = Timer(timestampToCallListener.difference(now), sendUpdate); // after "period"
+      }
+      else
+        await sendUpdate();
+    }, sendNow: sendNow, onCancel: onCancel);
   }
+}
+
+
+class _ThrottleValue<T> extends ReadonlyValue<T> with _ThrottleValueBase<T> {
+  _ThrottleValue(this.origin, this.period);
+
+  @override final ReadonlyValue<T> origin;
+  @override final Duration period;
+}
+extension ThrottleExtension<T> on ReadonlyValue<T> {
+  //! Multiple listeners in theory can have different updates coming, because of separate timer instances
+  ReadonlyValue<T> throttle(Duration period) => _ThrottleValue(this, period);
+}
+
+
+class _ThrottleListValue<T> extends ReadonlyListValue<T> with _ThrottleValueBase<List<T>>{
+  _ThrottleListValue(this.origin, this.period);
+
+  @override final ReadonlyListValue<T> origin;
+  @override final Duration period;
+}
+extension ThrottleListExtension<T> on ReadonlyListValue<T> {
+  //! Multiple listeners in theory can have different updates coming, because of separate timer instances
+  ReadonlyListValue<T> throttleList(Duration period) => _ThrottleListValue(this, period);
+}
+
+
+class _ThrottleMapValue<K, V> extends ReadonlyMapValue<K, V> with _ThrottleValueBase<Map<K, V>> {
+  _ThrottleMapValue(this.origin, this.period);
+
+  @override final ReadonlyMapValue<K, V> origin;
+  @override final Duration period;
+}
+extension ThrottleMapExtension<K, V> on ReadonlyMapValue<K, V> {
+  //! Multiple listeners in theory can have different updates coming, because of separate timer instances
+  ReadonlyMapValue<K, V> throttleMap(Duration period) => _ThrottleMapValue(this, period);
 }

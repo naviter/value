@@ -1,13 +1,13 @@
 name: value
-description: Reactive programming library in Dart
+description: Reactive programming library
 
 environment:
-  sdk: '>=2.10.0 <3.0.0'
+  sdk: '>=3.1.0 <4.0.0'
 
 dependencies:
   meta:
+  stack_trace:
 
 dev_dependencies:
-  dependency_validator:
   flutter_test:
     sdk: flutter

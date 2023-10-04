@@ -9,71 +9,70 @@ abstract class ReadonlyListValue<T> extends ReadonlyValue<List<T>> {
 }
 
 class ListValue<T> extends ReadonlyListValue<T> with PauseResumeForValue<List<T>> implements Value<List<T>> {
-  ListValue({Iterable<T> initialValue, this.distinctMode = false})
+  ListValue([Iterable<T>? initialValue])
     : _value = initialValue != null ? List.from(initialValue) : [];
 
-  final List<T> _value;
+  List<T> _value;
   @override List<T> get value => _value;
-  
-  @override
-  Future<void> set(List<T> update) async {
-    _value..clear()
-      ..addAll(update);
+  @override set value(List<T> update) { _value = List<T>.from(update); notifyListeners(); }
+  @override void set(List<T> update, {bool sendNotifications = true}) {
+    _value = List<T>.from(update);
 
-    await notifyListeners();
+    if (sendNotifications)
+      notifyListeners();
   }
 
-  @override final bool distinctMode;
+  @deprecated @override final distinctMode = false; // not used in ListValue
 
   void operator []= (int i, T update) {
-    if (!distinctMode || update != _value[i]) {
-      _value[i] = update;
-      notifyListeners(); // unawaited
-    }
+    _value[i] = update;
+    notifyListeners(); // unawaited
   }
-
-  Future<void> add(T item) { _value.add(item); return notifyListeners(); }
-  Future<void> addAll(Iterable<T> items) { _value.addAll(items); return notifyListeners(); }
-  Future<void> remove(T item) { _value.remove(item); return notifyListeners(); }
-  Future<void> clear() { _value.clear(); return notifyListeners(); }
+  void add(T item) { _value.add(item); notifyListeners(); }
+  void addIfMissing(T item) { if (!_value.contains(item)) _value.add(item); notifyListeners(); }
+  void addAll(Iterable<T> items) { _value.addAll(items); notifyListeners(); }
+  void remove(T item) { _value.remove(item); notifyListeners(); }
+  void clear() { _value.clear(); notifyListeners(); }
   bool contains(T item) => _value.contains(item);
 
-  Future<void> replaceOrAdd(T oldItem, T newItem) async {
+  void replaceOrAdd(T oldItem, T newItem) {
     final index = _value.indexOf(oldItem);
     if (index >= 0)
       this[index] = newItem;
-    else
+    else {
       _value.add(newItem);
-
-    await notifyListeners();
+      notifyListeners();
+    }
   }
 
-  Future<void> replaceWhereOrAdd(bool Function(T item) test, T newItem) async {
+  void replaceWhereOrAdd(bool Function(T item) test, T newItem) {
     final index = _value.indexWhere(test);
     if (index >= 0)
       this[index] = newItem;
-    else
+    else {
       _value.add(newItem);
-
-    await notifyListeners();
+      notifyListeners();
+    }
   }
 
-  Future<void> removeWhere(bool Function(T item) test) async {
+  void removeWhere(bool Function(T item) test) {
     _value.removeWhere(test);
-    await notifyListeners();
+    notifyListeners();
   }
 
-  Future<void> removeWhereType<K extends T>() async {
+  void removeWhereType<K extends T>() {
     _value.removeWhere((element) => element is K);
-    await notifyListeners();
+    notifyListeners();
   }
 
-  Future<void> addOrRemove(T item, bool condition) async {
-    if (condition && !_value.contains(item))
+  void addOrRemove(T item, bool condition) {
+    if (condition && !_value.contains(item)) {
       _value.add(item);
-    else if (!condition && _value.contains(item))
+      notifyListeners();
+    }
+    else if (!condition && _value.contains(item)) {
       _value.remove(item);
-
-    await notifyListeners();
+      notifyListeners();
+    }
   }
 }

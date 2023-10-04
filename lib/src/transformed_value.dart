@@ -3,97 +3,109 @@ import 'dart:async';
 import 'list_value.dart';
 import 'value.dart';
 
-
-//* Extensions
-extension TransformExtension<T> on ReadonlyValue<T> {
-  ReadonlyValue<R> transform<R>(R Function(T) transformer, {bool distinctMode = true})
-    => _TransformedValue(this, transformer, distinctMode: distinctMode);
-
-  Value<R> transformWithMethodUpdate<R>(R Function(T) transformer, FutureOr<void> Function(R) update, {bool distinctMode = true})
-    => _TransformedValueWithMethodUpdate(this, transformer, update, distinctMode: distinctMode);
-}
-
-extension TwoWayTransformExtension<T> on Value<T> {
-  Value<R> twoWayTransform<R>(R Function(T) transformer, T Function(R) backTransformer) => _TwoWayTransformedValue(this, transformer, backTransformer);
-}
-
-extension TransformedListExtension<T> on ReadonlyListValue<T> {
-  ReadonlyListValue<R> transformList<R>(R Function(T) transformer, {bool Function(T) filter, int Function(R, R) sort})
-    => _TransformedListValue(this, transformer, filter: filter, sort: sort);
-}
-
-
-//* Implementation
 class _TransformedValue<T, R> extends ReadonlyValue<R> {
-  _TransformedValue(this.origin, this.transformer, {this.distinctMode = true});
+  _TransformedValue(this.origin, this.transformer, this.distinctMode);
 
   final ReadonlyValue<T> origin;
   final R Function(T) transformer;
   bool distinctMode;
 
   @override R get value => transformer(origin.value);
-  R _previousValue;
 
-  @override ValueSubscription listen(FutureOr<void> Function(R) listener, {bool sendNow = false, Future<void> Function() onCancel}) {
+  @override ValueSubscription listen(FutureOr<void> Function(R) listener, {bool sendNow = false, void Function()? onCancel}) {
+    R? previousValue;
+
     return origin.listen((newValue) async {
-      R transformedValue;
-      if (!distinctMode || (transformedValue = transformer(newValue)) != _previousValue) {
+      final transformedValue = transformer(newValue);
+      if (!distinctMode || transformedValue != previousValue) {
+        previousValue = transformedValue;
         await listener(transformedValue);
-        _previousValue = transformedValue;
       }
-    }, sendNow: sendNow);
+    }, sendNow: sendNow, onCancel: onCancel);
   }
 }
 
 class _TransformedListValue<T, R> extends ReadonlyListValue<R> {
-  _TransformedListValue(this.origin, this.transformer, {this.filter, this.sort});
+  _TransformedListValue(this.origin, this.transformer);
 
   final ReadonlyValue<List<T>> origin;
   final R Function(T) transformer;
-  final bool Function(T) filter;
-  final int Function(R, R) sort;
 
   @override List<R> get value => _transformList(origin.value);
 
-  @override ValueSubscription listen(FutureOr<void> Function(List<R>) listener, {bool sendNow = false, Future<void> Function() onCancel})
-    => origin.listen((newValue) => listener(_transformList(newValue)), sendNow: sendNow);
+  @override ValueSubscription listen(FutureOr<void> Function(List<R>) listener, {bool sendNow = false, void Function()? onCancel})
+    => origin.listen((newValue) => listener(_transformList(newValue)), sendNow: sendNow, onCancel: onCancel);
 
-  List<R> _transformList(List<T> source) {
-    if (source == null)
-      return null;
+  List<R> _transformList(List<T> source) => source.map(transformer).toList();
+}
 
-    final filteredList = filter != null ? source.where(filter) : source;
-    final transformedList = filteredList.map(transformer).toList();
+class _FilteredListValue<T> extends ReadonlyListValue<T> {
+  _FilteredListValue(this.origin, this.filter, this.sort);
+
+  final ReadonlyValue<List<T>> origin;
+  final bool Function(T) filter;
+  final int Function(T, T)? sort;
+
+  @override List<T> get value => _filterList(origin.value);
+
+  @override ValueSubscription listen(FutureOr<void> Function(List<T>) listener, {bool sendNow = false, void Function()? onCancel})
+    => origin.listen((newValue) => listener(_filterList(newValue)), sendNow: sendNow, onCancel: onCancel);
+
+  List<T> _filterList(List<T> source) {
+    final filteredList = source.where(filter).toList();
+
     if (sort != null)
-      transformedList.sort(sort);
-    return transformedList;
+      filteredList.sort(sort);
+    return filteredList;
   }
 }
 
 
 class _TransformedValueWithMethodUpdate<T, R> extends _TransformedValue<T, R> with PauseResumeForValue<R> implements Value<R> {
-  _TransformedValueWithMethodUpdate(this.origin, R Function(T) transformer, this.updateMethod, {bool distinctMode = true})
-    : super(origin, transformer, distinctMode: distinctMode);
+  _TransformedValueWithMethodUpdate(super.origin, super.transformer, this.updateMethod, super.distinctMode);
 
   final FutureOr<void> Function(R) updateMethod;
 
-  // ignore: overridden_fields
-  @override final ReadonlyValue<T> origin;
+  @override set value(R newValue) => updateMethod(newValue);
+  @override Future<void> set(R update, {bool sendNotifications = true}) async {
+    if (!sendNotifications)
+      throw UnimplementedError("sendNotifications == false is not implmemented in transformWithMethodUpdate");
+    return updateMethod(update);
+  }
 
-  @override R get value => transformer(origin.value);
-  @override Future<void> set(R update) async => updateMethod(update);
-  @override Future<void> notifyListeners([R update]) async => updateMethod(update);
+  @override void notifyListeners() => updateMethod(value);
 }
 
 
 class _TwoWayTransformedValue<T, R> extends _TransformedValueWithMethodUpdate<T, R> {
-  _TwoWayTransformedValue(this.origin, R Function(T) transformer, this.backTransformer, {bool distinctMode = true})
-    : super(origin, transformer, (update) async => origin.set(backTransformer(update)), distinctMode: distinctMode);
+  _TwoWayTransformedValue(this.origin, R Function(T) transformer, this.backTransformer, bool distinctMode)
+    : super(origin, transformer, (update) => origin.value = backTransformer(update), distinctMode);
 
   final T Function(R) backTransformer;
 
   // ignore: overridden_fields, origin is generalized ReadonlyValue -> Value, because two way transform makes no sense for ReadonlyValue
   @override final Value<T> origin;
+}
 
-  @override Future<void> notifyListeners([R update]) async => origin.notifyListeners(backTransformer(update));
+
+//* Extensions
+extension TransformExtension<T> on ReadonlyValue<T> {
+  ReadonlyValue<R> transform<R>(R Function(T) transformer, {bool distinctMode = true})
+    => _TransformedValue(this, transformer, distinctMode);
+
+  Value<R> transformWithMethodUpdate<R>(R Function(T) transformer, FutureOr<void> Function(R) update, {bool distinctMode = true})
+    => _TransformedValueWithMethodUpdate(this, transformer, update, distinctMode);
+}
+
+extension TwoWayTransformExtension<T> on Value<T> {
+  Value<R> twoWayTransform<R>(R Function(T) transformer, T Function(R) backTransformer, {bool distinctMode = true})
+    => _TwoWayTransformedValue(this, transformer, backTransformer, distinctMode);
+}
+
+extension TransformedListExtension<T> on ReadonlyListValue<T> {
+  ReadonlyListValue<R> transformList<R>(R Function(T) transformer)
+    => _TransformedListValue(this, transformer);
+
+  ReadonlyListValue<T> filter(bool Function(T) filter, {int Function(T, T)? sort})
+    => _FilteredListValue(this, filter, sort);
 }

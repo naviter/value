@@ -1,0 +1,19 @@
+{
+  "files.exclude": {
+    "**/.DS_Store": true,
+    "**/.idea": true,
+    "**/.vscode": true,
+    "**/.*": true,
+    "**/*.iml": true,
+    "**/*.lock": true,
+    "**/analysis_options.yaml": true,
+    "**/build": true,
+    "**/.dart_tool": true,
+    "**/.flutter*": true,
+    "**/.packages": true,
+    "**/.metadata": true,
+    "**/README.md": true,
+  },
+  "editor.tabSize": 2,
+  "dart.lineLength": 140,
+}
