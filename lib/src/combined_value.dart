@@ -275,6 +275,29 @@ ValueSubscription combine9<T1, T2, T3, T4, T5, T6, T7, T8, T9>(
       action,
     );
 
+ValueSubscription combine10<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(
+  ReadonlyValue<T1> value1,
+  ReadonlyValue<T2> value2,
+  ReadonlyValue<T3> value3,
+  ReadonlyValue<T4> value4,
+  ReadonlyValue<T5> value5,
+  ReadonlyValue<T6> value6,
+  ReadonlyValue<T7> value7,
+  ReadonlyValue<T8> value8,
+  ReadonlyValue<T9> value9,
+  ReadonlyValue<T10> value10,
+  {
+    required FutureOr<void> Function(T1, T2, T3, T4, T5, T6, T7, T8, T9, T10) action,
+    List<ReadonlyValue>? triggeredBy,
+    bool sendNow = false,
+  }) =>
+    _combine(
+      [value1, value2, value3, value4, value5, value6, value7, value8, value9, value10],
+      triggeredBy,
+      sendNow,
+      action,
+    );
+
 /// Triggers action() on every update of every Value.
 /// ! accessing Value.value in handler gives it's current state, but not the state at the moment when handler execution was scheduled
 ValueSubscription combine(List<ReadonlyValue> values, FutureOr<void> Function() action, {bool sendNow = false}) {
