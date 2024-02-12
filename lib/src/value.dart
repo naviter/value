@@ -38,9 +38,8 @@ abstract class ReadonlyValue<T> {
   static void Function(String emoji, String text) log = (emoji, text) => print("$emoji $text");
 
   /// If executing listener takes more than specified, log entry is published
-  static Duration reportedListenerStartDelay = const Duration(milliseconds: 1000);
   static Duration reportedListenerExecutionDelay = const Duration(milliseconds: 200);
-  static bool logSlowListeners = true; // Create log entries for every slowly executed listener
+  static bool logSlowListeners = false; // Create log entries for every slowly executed listener
   static int _globalActiveListenersCount = 0;
 
   /// Notifies listeners if not in paused mode
@@ -58,7 +57,6 @@ abstract class ReadonlyValue<T> {
     if (_listeners.isEmpty)
       return;
 
-    final startSw = Stopwatch()..start();
     var activeListenersCount = _listeners.length;
     _globalActiveListenersCount += activeListenersCount;
     final completer = Completer<void>();
@@ -66,7 +64,6 @@ abstract class ReadonlyValue<T> {
     for (final listener in _listeners) {
       scheduleMicrotask(() async { // unawaited
         try {
-          late final Duration startDelay;
           late final Stopwatch executionSw;
           late final int period;
 
@@ -76,8 +73,6 @@ abstract class ReadonlyValue<T> {
             listener.averagePeriod ??= period;
             listener.averagePeriod = listener.averagePeriod! + (period - listener.averagePeriod!) ~/ 25;
             listener.periodStopwatch.reset();
-
-            startDelay = startSw.elapsed;
             executionSw = Stopwatch()..start();
           }
 
@@ -86,8 +81,8 @@ abstract class ReadonlyValue<T> {
           if (logSlowListeners) {
             final executionDelay = executionSw.elapsed;
 
-            if (startDelay > reportedListenerStartDelay || executionDelay > reportedListenerExecutionDelay) {
-              log("⏳", "Value handler for ${_formatValue(update)} started in ${startDelay.inMilliseconds} ms and took ${executionDelay.inMilliseconds} ms, period $period current / ${listener.averagePeriod} avg ms, total listeners: $_globalActiveListenersCount");
+            if (executionDelay > reportedListenerExecutionDelay) {
+              log("⏳", "Value handler for ${_formatValue(update)} took ${executionDelay.inMilliseconds} ms, period $period current / ${listener.averagePeriod} avg ms, total listeners: $_globalActiveListenersCount");
               // logTrace(listener);
             }
           }

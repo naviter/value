@@ -313,7 +313,8 @@ class CombinedValueSubscription extends ValueSubscription {
 
   final List<ValueSubscription> _singleSubscriptions;
 
-  @override Future<void> cancel() async {
+  @override
+  void cancel() {
     for(final subscription in _singleSubscriptions.where((s) => !s.isCancelled))
       subscription.cancel();
 
