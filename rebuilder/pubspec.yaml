@@ -8,7 +8,7 @@ dependencies:
   flutter:
     sdk: flutter
   value:
-    path: ..
+    git: https://github.com/naviter/value
 
 dev_dependencies:
   flutter_test:
