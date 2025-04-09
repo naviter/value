@@ -4,7 +4,7 @@ import 'package:value/value.dart';
 
 final _globalStopwatch = Stopwatch()..start();
 // ignore: avoid_print
-void log(String text) => print("${_globalStopwatch.elapsedMicroseconds} $text");
+void log(Object text) => print("${_globalStopwatch.elapsedMicroseconds / 1000000} $text");
 
 Future<void> delay(int i) async => Future<void>.delayed(Duration(milliseconds: i));
 // void delaySync(int i) {
@@ -23,7 +23,7 @@ void main() {
 
     x.listen((update) async {
       // log("x: $update");
-      await delay(1);
+      await delay(10);
       counter++;
     });
 
@@ -31,7 +31,7 @@ void main() {
     x.value = 2;
     x.value = 3;
 
-    await delay(5);
+    await delay(50);
     expect(counter, 3);
 
     await x.setAndWait(137);

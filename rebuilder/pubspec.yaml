@@ -1,8 +1,8 @@
 name: rebuilder
-description: A new Flutter package project.
+description: UI extensions for Value package
 
 environment:
-  sdk: '>=3.1.0 <4.0.0'
+  sdk: '>=3.4.3 <4.0.0'
 
 dependencies:
   flutter:

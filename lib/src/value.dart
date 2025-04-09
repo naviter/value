@@ -8,14 +8,17 @@ abstract class ReadonlyValue<T> {
   /// Current value of Value
   T get value;
 
+  String? get debugName;
+
   /// [listener] is called every time the Value is updated
   ValueSubscription listen(
     FutureOr<void> Function(T) listener, {
       bool sendNow = false,
       void Function()? onCancel,
+      String? debugName,
     }) {
 
-    final listenerObj = _Listener(listener, Trace.current());
+    final listenerObj = _Listener(listener, Trace.current(), debugName);
     _listeners.add(listenerObj);
 
     if (sendNow)
@@ -29,88 +32,78 @@ abstract class ReadonlyValue<T> {
   /// True, when there is at least one listener
   bool get hasListeners => _listeners.isNotEmpty;
 
+  Type get underlyingType => T;
+
   // Pause/resume listeners functionality
-  bool get isPaused => _isPaused;
-  bool _isPaused = false;
+  var _isPausedCounter = 0;
   bool _hadUpdatesDuringPause = false;
 
   // ignore: avoid_print, prefer_function_declarations_over_variables
   static void Function(String emoji, String text) log = (emoji, text) => print("$emoji $text");
 
   /// If executing listener takes more than specified, log entry is published
-  static Duration reportedListenerExecutionDelay = const Duration(milliseconds: 200);
-  static bool logSlowListeners = false; // Create log entries for every slowly executed listener
-  static int _globalActiveListenersCount = 0;
+  static bool reportDelays = false;
+  static Duration reportedListenerExecutionDelay = const Duration(milliseconds: 100);
 
   /// Notifies listeners if not in paused mode
   void notifyListeners() => _maybeNotifyListeners(value);
 
   Future<void> _maybeNotifyListeners(T update) async {
-    if (isPaused)
+    if (_isPausedCounter > 0)
       _hadUpdatesDuringPause = true;
     else
       await _notifyListeners(update);
   }
+
+  late final String _debugNameText = debugName != null ? "[$debugName] " : ""; // Internal helper for delay reports
 
   /// Actually invokes listeners, do not call directly
   Future<void> _notifyListeners(T update) async {
     if (_listeners.isEmpty)
       return;
 
-    var activeListenersCount = _listeners.length;
-    _globalActiveListenersCount += activeListenersCount;
-    final completer = Completer<void>();
+    final valueUpdated = DateTime.now();
 
-    for (final listener in _listeners) {
-      scheduleMicrotask(() async { // unawaited
-        try {
-          late final Stopwatch executionSw;
-          late final int period;
+    await Future.delayed(Duration.zero); // Breaks sync execution intentionally, otherwise listeners are called to early, inside synchronous context.
 
-          if (logSlowListeners) {
-            listener.periodStopwatch.start();
-            period = listener.periodStopwatch.elapsedMilliseconds;
-            listener.averagePeriod ??= period;
-            listener.averagePeriod = listener.averagePeriod! + (period - listener.averagePeriod!) ~/ 25;
-            listener.periodStopwatch.reset();
-            executionSw = Stopwatch()..start();
-          }
-
-          await listener.method(update);
-
-          if (logSlowListeners) {
-            final executionDelay = executionSw.elapsed;
-
-            if (executionDelay > reportedListenerExecutionDelay) {
-              log("⏳", "Value handler for ${_formatValue(update)} took ${executionDelay.inMilliseconds} ms, period $period current / ${listener.averagePeriod} avg ms, total listeners: $_globalActiveListenersCount");
-              // logTrace(listener);
-            }
-          }
-        }
-        catch (e) {
-          log("⚡", "Unhandled exception in Value listener for ${_formatValue(update)}: $e");
-          logTrace(listener);
-
-          if (e is Error)
-            log("📛", e.stackTrace.toString());
-        }
-        finally {
-          activeListenersCount--;
-          _globalActiveListenersCount--;
-          if (activeListenersCount == 0)
-            completer.complete();
-        }
-      });
+    if (reportDelays) {
+      final start = DateTime.now();
+      final startDelay = start.difference(valueUpdated);
+      if (startDelay > reportedListenerExecutionDelay) {
+        final listenerNames = _listeners.where((x) => x.debugName != null).map((x) => x.debugName).toList();
+        final listenerNamesText = listenerNames.isNotEmpty ? "(${listenerNames.join(", ")}${_listeners.length > listenerNames.length ? ",..." : ""})" : "";
+        log("🕜", "Delayed ${_listeners.length} listener${_listeners.length > 1 ? "s" : ""}$listenerNamesText ${startDelay.inMilliseconds} ms for $_debugNameText${_formatValue(update)}");
+      }
     }
 
-    return completer.future;
+    await Future.wait(_listeners.map((listener) async {
+      try {
+        final start = DateTime.now();
+
+        await listener.method(update);
+
+        if (reportDelays) {
+          final duration = DateTime.now().difference(start);
+          if (duration > reportedListenerExecutionDelay) {
+            log("⏳", "Listener ${listener.debugName ?? ""} took ${duration.inMilliseconds} ms for $_debugNameText${_formatValue(update)}");
+          }
+        }
+      }
+      catch(e) {
+        log("⚡", "Unhandled exception in ${listener.debugName ?? ""} Value listener for $_debugNameText${_formatValue(update)}: $e");
+        _logTrace(listener);
+
+        if (e is Error)
+          log("📛", e.stackTrace.toString());
+      }
+    }));
   }
 
-  String _formatValue(T valueCached) => "<$T>${T != valueCached.runtimeType ? "/<${valueCached.runtimeType}>" : ""}${valueCached is List ? "[${valueCached.length} items]" : valueCached is Map ? "{${valueCached.length} items}" : valueCached}";
+  String _formatValue(T x) => "<$T>${x is List ? "[${x.length} items]" : x is Map ? "{${x.length} items}" : x}";
 
   static const _ignoredPackages = ["value", "utils", "test_api", "dart"];
 
-  void logTrace(_Listener listener) {
+  void _logTrace(_Listener listener) {
     final frames = listener.stackTrace.frames;
 
     late bool isFlutterTest;
@@ -140,26 +133,44 @@ abstract class ReadonlyValue<T> {
     }
   }
 
+  Future<void> waitFor(T match, {Duration? timeout}) async {
+    if (value == match)
+      return;
+
+    final completer = Completer<void>();
+    final subscription = this.listen((update){
+      if (update == match && !completer.isCompleted)
+        completer.complete();
+    }, sendNow: true);
+
+    await (timeout != null
+      ? completer.future.timeout(timeout)
+      : completer.future);
+
+    subscription.cancel();
+  }
+
   @override String toString() => value.toString();
 }
 
 class _Listener<T> {
-  _Listener(this.method, this.stackTrace);
+  _Listener(this.method, this.stackTrace, this.debugName);
 
   final FutureOr<void> Function(T) method;
   final Trace stackTrace;
   final periodStopwatch = Stopwatch(); // tracks period of listener calls
   int? averagePeriod;
+  String? debugName;
 }
 
 mixin PauseResumeForValue<T> on ReadonlyValue<T> {
-  //! There is a potential problem in multiple entering paused state
-  void pauseListeners() => _isPaused = true;
+  void pauseListeners() => _isPausedCounter++;
 
   void resumeListeners({bool sendMissedNotifications = true}) {
-    _isPaused = false;
+    if (_isPausedCounter > 0)
+      _isPausedCounter--;
 
-    if (sendMissedNotifications && _hadUpdatesDuringPause) {
+    if (_isPausedCounter == 0 && sendMissedNotifications && _hadUpdatesDuringPause) {
       _hadUpdatesDuringPause = false;
       scheduleMicrotask(() => _notifyListeners(value));
     }
@@ -173,18 +184,20 @@ mixin WriteonlyValue<T> {
 
 
 class ConstValue<T> extends ReadonlyValue<T> {
-  ConstValue(this._value);
+  ConstValue(this._value, {this.debugName});
   static ConstValue<bool> get alwaysTrue => ConstValue<bool>(true);
   static ConstValue<bool> get alwaysFalse => ConstValue<bool>(false);
 
   final T _value;
   @override T get value => _value;
+
+  @override final String? debugName;
 }
 
 
 //* Regular value
 class Value<T> extends ReadonlyValue<T> with PauseResumeForValue<T>, WriteonlyValue<T> {
-  Value(this._value, {this.distinctMode = true});
+  Value(this._value, {this.distinctMode = true, this.debugName});
 
   T _value;
   @nonVirtual @override T get value => _value;
@@ -198,6 +211,8 @@ class Value<T> extends ReadonlyValue<T> with PauseResumeForValue<T>, WriteonlyVa
   /// When true, listeners are notified only if underlying value was changed (!= previous value).
   /// Should be set to false for List, Map and mutable classes, where equivalence by value is not implemented
   final bool distinctMode;
+
+  @override final String? debugName;
 
   /// Sets a new value
   @override
@@ -229,10 +244,8 @@ abstract class ValueSubscription {
 
   final void Function()? onCancel; // called AFTER removing the listener
   @mustCallSuper void cancel() {
-    final runOnCancel = !isCancelled;
-    _isCancelled = true;
-
-    if (runOnCancel)
+    if (!_isCancelled)
+      _isCancelled = true;
       onCancel?.call();
   }
 }
@@ -256,7 +269,7 @@ extension ToggleBoolValueExtension on Value<bool> {
 
 /// Stream -> ReadonlyValue converter
 class StreamValue<T> extends ReadonlyValue<T> {
-  StreamValue(this._stream, {this.errorBuilder, required T initialValue, this.distinctMode = true}) {
+  StreamValue(this._stream, {this.errorBuilder, required T initialValue, this.distinctMode = true, this.debugName}) {
     _value = initialValue;
     notifyListeners();
   }
@@ -266,15 +279,18 @@ class StreamValue<T> extends ReadonlyValue<T> {
     T Function(Object error)? errorBuilder,
     required Future<T> initialValueFuture,
     bool distinctMode = true,
+    String? debugName,
   }) async
-    => StreamValue(stream, errorBuilder: errorBuilder, initialValue: await initialValueFuture, distinctMode: distinctMode);
+    => StreamValue(stream, errorBuilder: errorBuilder, initialValue: await initialValueFuture, distinctMode: distinctMode, debugName: debugName);
 
   @override T get value => _value;
   late T _value;
 
   final Stream<T> _stream;
   StreamSubscription? _streamSubscription;
-  bool distinctMode;
+  final bool distinctMode;
+  @override final String? debugName;
+
   final T Function(Object error)? errorBuilder;
 
   @override
@@ -282,8 +298,9 @@ class StreamValue<T> extends ReadonlyValue<T> {
     FutureOr<void> Function(T) listener, {
     bool sendNow = false,
     void Function()? onCancel,
+    String? debugName,
   }) {
-    _listeners.add(_Listener(listener, Trace.current()));
+    _listeners.add(_Listener(listener, Trace.current(), debugName));
 
     _streamSubscription ??= _stream
       .handleError((Object error) {

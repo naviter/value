@@ -8,13 +8,14 @@ abstract class ReadonlyMapValue<K, T> extends ReadonlyValue<Map<K, T>> {
 }
 
 class MapValue<K, T> extends ReadonlyMapValue<K, T> with PauseResumeForValue<Map<K, T>> implements Value<Map<K, T>> {
-  MapValue([Map<K, T>? initialValue])
+  MapValue([Map<K, T>? initialValue, this.debugName])
   : _value = initialValue != null ? Map.from(initialValue) : {};
 
   Map<K, T> _value;
   @override Map<K, T> get value => _value;
   @override set value(Map<K, T> update) => set(update);
   @deprecated @override final distinctMode = false; // not used in MapValue
+  @override String? debugName;
 
   @override
   Future<void> set(Map<K, T> update, {bool sendNotifications = true}) async {

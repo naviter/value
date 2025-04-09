@@ -8,14 +8,15 @@ mixin _DebounceValueBase<T> on ReadonlyValue<T> {
   ReadonlyValue<T> get origin;
   Duration get duration;
   @override T get value => origin.value;
+  @override String? get debugName => origin.debugName != null ? "Debounce:${origin.debugName}" : null;
 
-  @override ValueSubscription listen(FutureOr<void> Function(T) listener, {bool sendNow = false, void Function()? onCancel}) {
+  @override ValueSubscription listen(FutureOr<void> Function(T) listener, {bool sendNow = false, void Function()? onCancel, String? debugName}) {
     Timer? timer;
 
     return origin.listen((newValue) async {
       timer?.cancel();
       timer = Timer(duration, () => listener(newValue));
-    }, sendNow: sendNow, onCancel: onCancel);
+    }, sendNow: sendNow, onCancel: onCancel, debugName: debugName);
   }
 }
 
@@ -32,7 +33,7 @@ extension DebounceExtension<T> on ReadonlyValue<T> {
 }
 
 
-class _DebounceListValue<T> extends ReadonlyListValue<T> with _DebounceValueBase<List<T>> {
+class _DebounceListValue<T> extends ReadonlyValue<List<T>> with ReadonlyListValue<T>, _DebounceValueBase<List<T>> {
   _DebounceListValue(this.origin, this.duration);
 
   @override final ReadonlyListValue<T> origin;

@@ -1,17 +1,19 @@
 import 'dart:async';
 
+import 'list_value.dart';
 import 'value.dart';
 
 abstract class _CombinedValue<R> extends ReadonlyValue<R> {
-  _CombinedValue(this._values, this.combiner, this.distinctMode);
+  _CombinedValue(this._values, this.combiner, this.distinctMode, this.debugName);
   final List<ReadonlyValue> _values;
   final Function combiner;
   final bool distinctMode;
-
+  @override final String? debugName;
+  
   @override R get value => Function.apply(combiner, _values.map((v) => v.value).toList()) as R;
 
   @override
-  CombinedValueSubscription listen(FutureOr<void> Function(R) action, {bool sendNow = false, void Function()? onCancel}) {
+  CombinedValueSubscription listen(FutureOr<void> Function(R) action, {bool sendNow = false, void Function()? onCancel, String? debugName}) {
     assert(onCancel == null, "onCancel is not supported in CombinedValueSubscription");
 
     /// Last known state of all the values
@@ -40,7 +42,7 @@ abstract class _CombinedValue<R> extends ReadonlyValue<R> {
     return CombinedValueSubscription._(_values.map((value) => value.listen((dynamic update) {
       states[value] = update;
       _tryCallListener(handler);
-    })).toList());
+    }, debugName: debugName)).toList());
   }
 }
 
@@ -49,9 +51,9 @@ class CombinedValue2<T1, T2, R> extends _CombinedValue<R> {
     ReadonlyValue<T1> value1,
     ReadonlyValue<T2> value2,
     R Function(T1, T2) combiner,
-    {bool distinctMode = false,}
+    {bool distinctMode = false, String? debugName}
   )
-  : super([value1, value2], combiner, distinctMode);
+  : super([value1, value2], combiner, distinctMode, debugName);
 }
 
 class CombinedValue3<T1, T2, T3, R> extends _CombinedValue<R> {
@@ -60,9 +62,9 @@ class CombinedValue3<T1, T2, T3, R> extends _CombinedValue<R> {
     ReadonlyValue<T2> value2,
     ReadonlyValue<T3> value3,
     R Function(T1, T2, T3) combiner,
-    {bool distinctMode = false,}
+    {bool distinctMode = false, String? debugName}
   )
-  : super([value1, value2, value3], combiner, distinctMode);
+  : super([value1, value2, value3], combiner, distinctMode, debugName);
 }
 
 class CombinedValue4<T1, T2, T3, T4, R> extends _CombinedValue<R> {
@@ -72,9 +74,9 @@ class CombinedValue4<T1, T2, T3, T4, R> extends _CombinedValue<R> {
     ReadonlyValue<T3> value3,
     ReadonlyValue<T4> value4,
     R Function(T1, T2, T3, T4) combiner,
-    {bool distinctMode = false,}
+    {bool distinctMode = false, String? debugName}
   )
-  : super([value1, value2, value3, value4], combiner, distinctMode);
+  : super([value1, value2, value3, value4], combiner, distinctMode, debugName);
 }
 
 class CombinedValue5<T1, T2, T3, T4, T5, R> extends _CombinedValue<R> {
@@ -85,9 +87,9 @@ class CombinedValue5<T1, T2, T3, T4, T5, R> extends _CombinedValue<R> {
     ReadonlyValue<T4> value4,
     ReadonlyValue<T5> value5,
     R Function(T1, T2, T3, T4, T5) combiner,
-    {bool distinctMode = false,}
+    {bool distinctMode = false, String? debugName}
   )
-  : super([value1, value2, value3, value4, value5], combiner, distinctMode);
+  : super([value1, value2, value3, value4, value5], combiner, distinctMode, debugName);
 }
 
 class CombinedValue6<T1, T2, T3, T4, T5, T6, R> extends _CombinedValue<R> {
@@ -99,10 +101,36 @@ class CombinedValue6<T1, T2, T3, T4, T5, T6, R> extends _CombinedValue<R> {
     ReadonlyValue<T5> value5,
     ReadonlyValue<T6> value6,
     R Function(T1, T2, T3, T4, T5, T6) combiner,
-    {bool distinctMode = false,}
+    {bool distinctMode = false, String? debugName}
   )
-  : super([value1, value2, value3, value4, value5, value6], combiner, distinctMode);
+  : super([value1, value2, value3, value4, value5, value6], combiner, distinctMode, debugName);
 }
+
+class CombinedValue7<T1, T2, T3, T4, T5, T6, T7, R> extends _CombinedValue<R> {
+  CombinedValue7(
+    ReadonlyValue<T1> value1,
+    ReadonlyValue<T2> value2,
+    ReadonlyValue<T3> value3,
+    ReadonlyValue<T4> value4,
+    ReadonlyValue<T5> value5,
+    ReadonlyValue<T6> value6,
+    ReadonlyValue<T7> value7,
+    R Function(T1, T2, T3, T4, T5, T6, T7) combiner,
+    {bool distinctMode = false, String? debugName}
+  )
+  : super([value1, value2, value3, value4, value5, value6, value7], combiner, distinctMode, debugName);
+}
+
+class CombinedListValue2<T1, T2, R> extends _CombinedValue<List<R>> with ReadonlyListValue<R> {
+  CombinedListValue2(
+    ReadonlyValue<T1> value1,
+    ReadonlyValue<T2> value2,
+    List<R> Function(T1, T2) combiner,
+    {bool distinctMode = false, String? debugName}
+  )
+  : super([value1, value2], combiner, distinctMode, debugName);
+}
+
 
 
 CombinedValueSubscription _combine(List<ReadonlyValue> values, List<ReadonlyValue>? triggeredBy, bool sendNow, Function action) {

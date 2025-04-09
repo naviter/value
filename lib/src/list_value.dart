@@ -1,15 +1,15 @@
 import 'value.dart';
 
 //* List value
-abstract class ReadonlyListValue<T> extends ReadonlyValue<List<T>> {
+mixin ReadonlyListValue<T> on ReadonlyValue<List<T>> {
   T operator [] (int i) => value[i];
   int get length => value.length;
   bool get isEmpty => value.isEmpty;
   bool get isNotEmpty => value.isNotEmpty;
 }
 
-class ListValue<T> extends ReadonlyListValue<T> with PauseResumeForValue<List<T>> implements Value<List<T>> {
-  ListValue([Iterable<T>? initialValue])
+class ListValue<T> extends ReadonlyValue<List<T>> with ReadonlyListValue<T>, PauseResumeForValue<List<T>> implements Value<List<T>> {
+  ListValue([Iterable<T>? initialValue, this.debugName])
     : _value = initialValue != null ? List.from(initialValue) : [];
 
   List<T> _value;
@@ -23,6 +23,7 @@ class ListValue<T> extends ReadonlyListValue<T> with PauseResumeForValue<List<T>
   }
 
   @deprecated @override final distinctMode = false; // not used in ListValue
+  @override final String? debugName;
 
   void operator []= (int i, T update) {
     _value[i] = update;

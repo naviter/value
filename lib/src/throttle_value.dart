@@ -8,8 +8,9 @@ mixin _ThrottleValueBase<T> on ReadonlyValue<T> {
   ReadonlyValue<T> get origin;
   Duration get period;
   @override T get value => origin.value;
+  @override String? get debugName => origin.debugName != null ? "Throttle:${origin.debugName}" : null;
 
-  @override ValueSubscription listen(FutureOr<void> Function(T) listener, {bool sendNow = false, void Function()? onCancel}) {
+  @override ValueSubscription listen(FutureOr<void> Function(T) listener, {bool sendNow = false, void Function()? onCancel, String? debugName}) {
     Timer? followUpTimer;
     DateTime? lastListenerCalled;
 
@@ -30,7 +31,7 @@ mixin _ThrottleValueBase<T> on ReadonlyValue<T> {
       }
       else
         await sendUpdate();
-    }, sendNow: sendNow, onCancel: onCancel);
+    }, sendNow: sendNow, onCancel: onCancel, debugName: debugName);
   }
 }
 
@@ -47,7 +48,7 @@ extension ThrottleExtension<T> on ReadonlyValue<T> {
 }
 
 
-class _ThrottleListValue<T> extends ReadonlyListValue<T> with _ThrottleValueBase<List<T>>{
+class _ThrottleListValue<T> extends ReadonlyValue<List<T>> with ReadonlyListValue<T>, _ThrottleValueBase<List<T>>{
   _ThrottleListValue(this.origin, this.period);
 
   @override final ReadonlyListValue<T> origin;

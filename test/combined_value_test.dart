@@ -19,6 +19,7 @@ void main() {
     final subscription = combine2<int, int>(x, y, action: (a, b) => actionsCounter++);
 
     x.value = 42;
+    await Future<void>.delayed(Duration(milliseconds: 10));
     subscription.cancel();
     await Future<void>.delayed(Duration(milliseconds: 10));
     x.value = 137;
@@ -48,9 +49,20 @@ void main() {
     y.value = 11;
     y.value = 12;
     x.value = 5;
+    await Future<void>.delayed(Duration(milliseconds: 10));
 
     subscription.cancel();
     await Future<void>.delayed(Duration(milliseconds: 10));
     expect(counter, 5);
+  });
+
+  test("CombinedListValue basic test", () async {
+    final x = Value<int>(1);
+    final y = Value<int>(40);
+    final z = CombinedListValue2(x, y, (v1, v2) => [v1, v2]);
+
+    x.value = 2;
+    expect(z.value[0], 2);
+    expect(z.value[1], 40);
   });
 }

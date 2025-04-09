@@ -27,12 +27,13 @@ class _TimeoutExtensionValue<T> extends ReadonlyValue<T?> {
 
   final ReadonlyValue<T> origin;
   final Duration duration;
+  @override String? get debugName => origin.debugName != null ? "Timeout:${origin.debugName}" : null;
 
   @override T? get value => isTimedOut ? null : origin.value;
   bool get isTimedOut => _activeTimersCounter == 0;
   int _activeTimersCounter = 0;
 
-  @override ValueSubscription listen(FutureOr<void> Function(T?) listener, {bool sendNow = false, void Function()? onCancel}) {
+  @override ValueSubscription listen(FutureOr<void> Function(T?) listener, {bool sendNow = false, void Function()? onCancel, String? debugName}) {
     Timer? timer;
 
     return origin.listen((update) async {
@@ -48,7 +49,7 @@ class _TimeoutExtensionValue<T> extends ReadonlyValue<T?> {
       _activeTimersCounter++;
 
       await listener(update);
-    }, sendNow: sendNow, onCancel: onCancel);
+    }, sendNow: sendNow, onCancel: onCancel, debugName: debugName);
   }
 }
 
